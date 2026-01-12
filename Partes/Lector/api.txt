@@ -1,7 +1,0 @@
-API de lector de código de barras de Python
-
-Aspose.BarCode for Python 
-
-Instalar Api
-
-pip install aspose-barcode-for-python-via-net
