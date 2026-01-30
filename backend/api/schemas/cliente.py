@@ -10,7 +10,7 @@ class ClienteBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class ClienteCreate(ClienteBase):
-    id_cliente_ci: int = Field(gt=0) #REVISAR ...
+    id_cliente_ci: int = Field(gt=0)
     
 class ClienteUpdate(BaseModel):
     nombre: Optional[str] = Field(None, max_length=100)
@@ -20,3 +20,4 @@ class ClienteUpdate(BaseModel):
 
 class ClienteRead(ClienteBase):
     id_cliente_ci: int
+    estatus: bool

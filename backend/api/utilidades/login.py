@@ -7,7 +7,6 @@ from config_db import sesion_local
 from modelos.empleado import Empleado
 from utilidades.cripto import SECRET_KEY, ALGORITHM
 
-# Esta url debe coincidir con la de tu endpoint de login
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 def get_db():
@@ -25,7 +24,6 @@ def get_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = Depend
     )
     
     try:
-        # Decodificamos el token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
@@ -33,7 +31,6 @@ def get_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = Depend
     except JWTError:
         raise exception_auth
     
-    # Buscamos al usuario en la BD
     usuario = db.query(Empleado).filter(Empleado.usuario == username).first()
     if usuario is None:
         raise exception_auth

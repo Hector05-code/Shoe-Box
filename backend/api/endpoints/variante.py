@@ -2,111 +2,113 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from typing import List
-
-# Configuración y DB
-from config_db import sesion_local
+from datetime import datetime
 from modelos.variante import Variante as VarianteModel
 from modelos.producto import Producto as ProductoModel
 from modelos.movimiento import Movimiento as MovimientoModel, TipoMovimientoEnum
-
-# Schemas
-# Importamos VarianteCreateSuelta porque aquí SI necesitamos el ID del padre
-from schemas.variante import VarianteRead, VarianteUpdate, VarianteCreateSuelta 
+from schemas.variante import VarianteRead, VarianteUpdate, VarianteCreate 
 from schemas.empleado import EmpleadoRead
-from utilidades.login import get_usuario_actual
+from utilidades.login import get_db, get_usuario_actual
+
 endpoint = APIRouter(prefix="/variantes", tags=["Variantes (Inventario)"])
 
-def get_db():
-    db = sesion_local()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Mock de seguridad
-# def get_usuario_actual():
-#     class UsuarioMock:
-#         id_empleado = 1
-#         funcion = "Gerente" 
-#     return UsuarioMock()
-
-# ==========================================
-# RUTAS DE LECTURA
-# ==========================================
-
+# LEER TODOS
 @endpoint.get("/", response_model=List[VarianteRead])
 def listar_variantes(
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = Depends(get_db)
+    mostrar_inactivos: bool = False,
+    db: Session = Depends(get_db),
+    _: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    # """
-    # Lista todas las variantes existentes. 
-    # Usamos joinedload para traer Color y Talla en la misma consulta (Optimización).
-    # """
-    variantes = db.query(VarianteModel).options(
+
+    query = db.query(VarianteModel).options(
         joinedload(VarianteModel.color_rel),
         joinedload(VarianteModel.talla_rel),
-        # Opcional: Si quieres ver el nombre del producto padre también
-        joinedload(VarianteModel.producto_rel) 
-    ).offset(skip).limit(limit).all()
+        joinedload(VarianteModel.producto_rel)
+    )
+
+    if not mostrar_inactivos:
+        query = query.filter(VarianteModel.estatus == True)
+        
+    variantes = query.offset(skip).limit(limit).all()
     
     return variantes
 
+# LEER UNO
 @endpoint.get("/{id}", response_model=VarianteRead)
-def obtener_variante(id: int, db: Session = Depends(get_db)):
+def obtener_variante(
+    id: int, 
+    db: Session = Depends(get_db),
+    _: EmpleadoRead = Depends(get_usuario_actual)
+    ):
+    
     variante = db.query(VarianteModel).options(
         joinedload(VarianteModel.color_rel),
-        joinedload(VarianteModel.talla_rel)
+        joinedload(VarianteModel.talla_rel),
+        joinedload(VarianteModel.producto_rel)
     ).filter(VarianteModel.id_variante == id).first()
     
     if not variante:
         raise HTTPException(status_code=404, detail="Variante no encontrada")
+        
     return variante
 
-# ==========================================
-# RUTAS DE ESCRITURA (Solo Gerentes)
-# ==========================================
-
+# POST
 @endpoint.post("/", response_model=VarianteRead, status_code=status.HTTP_201_CREATED)
-def agregar_variante_a_producto(
-    variante_in: VarianteCreateSuelta, 
+def crear_variante_suelta(
+    variante_in: VarianteCreate, 
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    # """
-    # Agrega una variante suelta (ej: Nueva Talla) a un producto que YA existe.
-    # """
-    if usuario_actual.funcion != "Gerente":
-        raise HTTPException(status_code=403, detail="Requiere permisos de Gerente.")
 
-    # 1. Validar que el producto padre exista
-    producto_padre = db.query(ProductoModel).filter(ProductoModel.id_producto == variante_in.id_producto).first()
+    producto_padre = db.query(ProductoModel).get(variante_in.id_producto)
     if not producto_padre:
-        raise HTTPException(status_code=404, detail=f"El producto padre con ID {variante_in.id_producto} no existe.")
+        raise HTTPException(status_code=404, detail="El producto padre no existe.")
 
-    existe_barcode = db.query(VarianteModel).filter(VarianteModel.barcode == variante_in.barcode).first()
-    if existe_barcode:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"El código de barras '{variante_in.barcode}' ya está registrado en el producto '{existe_barcode.producto_rel.nombre}'."
-        )
+    existe_combinacion = db.query(VarianteModel).filter(
+        VarianteModel.id_producto == variante_in.id_producto,
+        VarianteModel.id_color == variante_in.id_color,
+        VarianteModel.id_talla == variante_in.id_talla,
+        VarianteModel.estatus == True
+    ).first()
+    
+    if existe_combinacion:
+        raise HTTPException(status_code=400, detail="Esta combinación (Producto + Color + Talla) ya existe.")
+
+    barcode_final = variante_in.barcode
+    if not barcode_final:
+        barcode_final = f"P{variante_in.id_producto}-C{variante_in.id_color}-T{variante_in.id_talla}"
+    else:
+        existe_barcode = db.query(VarianteModel).filter(VarianteModel.barcode == barcode_final).first()
+        if existe_barcode:
+             raise HTTPException(status_code=400, detail=f"El Código de barras '{barcode_final}' ya está en uso.")
 
     try:
-        # 2. Crear la variante
-        nueva_variante = VarianteModel(**variante_in.model_dump())
+        nueva_variante = VarianteModel(
+            id_producto=variante_in.id_producto,
+            id_talla=variante_in.id_talla,
+            id_color=variante_in.id_color,
+            barcode=barcode_final,
+            stock_minimo=variante_in.stock_minimo,
+            stock_actual=variante_in.stock_actual,
+            costo_usd_esp=variante_in.costo_usd_esp,
+            precio_venta_usd_esp=variante_in.precio_venta_usd_esp,
+            estatus=True
+        )
+        
         db.add(nueva_variante)
-        db.flush() # Generar ID
-
-        # 3. Registrar Movimiento Inicial (Si hay stock)
-        # Esto mantiene la coherencia del Kardex
-        if nueva_variante.stock_actual > 0:
+        db.flush()
+        
+        if variante_in.stock_actual > 0:
             movimiento = MovimientoModel(
                 id_variante=nueva_variante.id_variante,
                 id_empleado=usuario_actual.id_empleado,
-                cantidad=nueva_variante.stock_actual,
-                tipo_movimiento=TipoMovimientoEnum.entrada, # O "AJUSTE_POSITIVO"
-                referencia="Ingreso de nueva variante al catálogo"
+                cantidad=variante_in.stock_actual,
+                tipo_movimiento=TipoMovimientoEnum.ENTRADA,
+                fecha=datetime.now(),
+                motivo="Inventario Inicial (Creación de Variante)",
+                stock_resultante=variante_in.stock_actual
             )
             db.add(movimiento)
 
@@ -114,53 +116,45 @@ def agregar_variante_a_producto(
         db.refresh(nueva_variante)
         return nueva_variante
 
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error: El SKU ya existe o combinación inválida.")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@endpoint.put("/{id}", response_model=VarianteRead)
+# PUT
+@endpoint.put("/{id_variante}", response_model=VarianteRead)
 def actualizar_variante(
-    id: int, 
+    id_variante: int, 
     variante_update: VarianteUpdate, 
     db: Session = Depends(get_db),
     usuario_actual : EmpleadoRead = Depends(get_usuario_actual)
 ):
-    # """
-    # Actualiza SKU, Color, Talla o Stock.
-    # NOTA: Si se cambia el stock aquí, se generará un movimiento de AJUSTE automáticamente.
-    # """
-    if usuario_actual.funcion.value != "Gerente":
-        raise HTTPException(status_code=403, detail="Requiere permisos de Gerente.")
+    if usuario_actual.funcion.value != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
-    variante_db = db.query(VarianteModel).filter(VarianteModel.id_variante == id).first()
+    variante_db = db.query(VarianteModel).filter(VarianteModel.id_variante == id_variante).first()
     if not variante_db:
         raise HTTPException(status_code=404, detail="Variante no encontrada")
 
     datos_nuevos = variante_update.model_dump(exclude_unset=True)
 
-    # Lógica especial para cambios de Stock manuales (Correcciones)
     stock_nuevo = datos_nuevos.get("stock_actual")
     
     if stock_nuevo is not None and stock_nuevo != variante_db.stock_actual:
-        # Calculamos la diferencia
         diferencia = stock_nuevo - variante_db.stock_actual
-        tipo = TipoMovimientoEnum.ajuste if diferencia > 0 else TipoMovimientoEnum.ajuste
         
-        # Registramos por qué cambió el stock (Auditoría)
+        accion = "Aumentó" if diferencia > 0 else "Disminuyó"
+        
         movimiento_ajuste = MovimientoModel(
-            id_variante=id,
+            id_variante=id_variante,
             id_empleado=usuario_actual.id_empleado,
-            cantidad=abs(diferencia), # Siempre positivo en la columna cantidad
-            tipo_movimiento=tipo,
-            referencia="Corrección manual de stock desde panel"
+            cantidad=diferencia,
+            tipo_movimiento=TipoMovimientoEnum.AJUSTE,
+            fecha=datetime.now(),
+            motivo=f"Corrección manual desde panel: {accion} {abs(diferencia)} unidades.",
+            stock_resultante=stock_nuevo
         )
         db.add(movimiento_ajuste)
 
-    # Aplicar cambios
     for key, value in datos_nuevos.items():
         setattr(variante_db, key, value)
 
@@ -168,25 +162,24 @@ def actualizar_variante(
         db.commit()
         db.refresh(variante_db)
         return variante_db
+        
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Error de integridad (posible SKU duplicado).")
+        raise HTTPException(status_code=400, detail="Error: Posible Código de barras o dato duplicado.")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# DELETE
 @endpoint.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_variante(
     id: int, 
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    # """
-    # Elimina una variante específica (ej: Ya no vendemos Talla XS).
-    # """
-    if usuario_actual.funcion.value != "Gerente":
-        raise HTTPException(status_code=403, detail="Requiere permisos de Gerente.")
+
+    if usuario_actual.funcion.value != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tiene permisos para esta función.")
 
     variante_db = db.query(VarianteModel).filter(VarianteModel.id_variante == id).first()
     
@@ -196,10 +189,18 @@ def eliminar_variante(
     try:
         db.delete(variante_db)
         db.commit()
-        return
+        
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="No se puede eliminar: Esta variante ya tiene ventas o movimientos asociados.")
+        
+        variante_db.estatus = False 
+        
+        db.add(variante_db)
+        db.commit()
+        
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error inesperado al borrar variante: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+
+    return None

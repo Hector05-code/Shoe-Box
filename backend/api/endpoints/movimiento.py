@@ -1,46 +1,80 @@
-from fastapi import APIRouter, Depends #Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime
-
-from config_db import sesion_local
 from modelos.movimiento import Movimiento as MovimientoModel, TipoMovimientoEnum
 from schemas.movimiento import MovimientoRead
+from modelos.variante import Variante as VarianteModel
+from schemas.movimiento import MovimientoAjuste
+from schemas.empleado import EmpleadoRead
+from utilidades.login import get_db, get_usuario_actual
 
-endpoint = APIRouter(prefix="/movimientos", tags=["Movimientos (Kardex/Historial)"])
+endpoint = APIRouter(prefix="/movimientos", tags=["Movimientos (Historial)"])
 
-def get_db():
-    db = sesion_local()
-    try:
-        yield db
-    finally:
-        db.close()
-
+# LEER TODOS (HISTORIAL + FILTROS)
 @endpoint.get("/", response_model=List[MovimientoRead])
 def consultar_historial(
     db: Session = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
-    tipo: Optional[TipoMovimientoEnum] = None, # Filtro opcional por tipo (ENTRADA/SALIDA)
-    id_variante: Optional[int] = None # Filtro opcional para ver historial de una sola camisa
+    tipo: Optional[TipoMovimientoEnum] = None,
+    id_variante: Optional[int] = None,
+    _: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    # """
-    # Consulta el historial de movimientos de inventario.
-    # Permite filtrar por Tipo (ej: solo ver AJUSTES) o por Producto.
-    # """
     query = db.query(MovimientoModel).options(
         joinedload(MovimientoModel.empleado_rel),
-        joinedload(MovimientoModel.variente_rel)
+        joinedload(MovimientoModel.variante_rel)
     )
 
-    # Filtros dinámicos
     if tipo:
         query = query.filter(MovimientoModel.tipo_movimiento == tipo)
     
     if id_variante:
         query = query.filter(MovimientoModel.id_variante == id_variante)
 
-    # Ordenar por el más reciente
     movimientos = query.order_by(MovimientoModel.fecha.desc()).offset(skip).limit(limit).all()
     
     return movimientos
+
+# REALIZAR AJUSTE DE INVENTARIO (PÉRDIDA, OTROS CASOS)
+@endpoint.post("/ajuste", status_code=status.HTTP_201_CREATED)
+def realizar_ajuste_inventario(
+    ajuste: MovimientoAjuste, 
+    db: Session = Depends(get_db),
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+):
+    if usuario_actual.funcion.value != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
+
+    variante = db.query(VarianteModel).filter(VarianteModel.id_variante == ajuste.id_variante).first()
+    if not variante:
+        raise HTTPException(status_code=404, detail="Variante no encontrada")
+
+    stock_sistema = variante.stock_actual
+    stock_real = ajuste.cantidad_real_fisica
+    diferencia = stock_real - stock_sistema
+
+    if diferencia == 0:
+        return {"mensaje": "El stock físico coincide con el sistema. No se generaron movimientos."}
+
+    variante.stock_actual = stock_real 
+
+    nuevo_movimiento = MovimientoModel(
+        id_variante=ajuste.id_variante,
+        tipo_movimiento=TipoMovimientoEnum.AJUSTE,
+        cantidad=diferencia,
+        fecha=datetime.now(),
+        id_empleado=usuario_actual.id_empleado,
+        motivo=ajuste.motivo + f" (Sistema: {stock_sistema} -> Real: {stock_real})",
+        stock_resultante=stock_real
+    )
+
+    db.add(nuevo_movimiento)
+    db.add(variante)
+    db.commit()
+    
+    accion = "Aumentó" if diferencia > 0 else "Disminuyó"
+    return {
+        "mensaje": f"Ajuste realizado. Se {accion} el stock en {abs(diferencia)} unidades.",
+        "stock_nuevo": variante.stock_actual
+    }

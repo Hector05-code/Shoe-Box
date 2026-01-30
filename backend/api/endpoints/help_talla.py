@@ -1,54 +1,38 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List
-
-from config_db import sesion_local
 from modelos.help_talla import Talla as TallaModel
 from schemas.help_talla import TallaCreate, TallaUpdate, TallaRead
 from schemas.empleado import EmpleadoRead
-from utilidades.login import get_usuario_actual 
+from utilidades.login import get_db, get_usuario_actual 
 
 endpoint = APIRouter(prefix="/tallas", tags=["Tallas"])
 
-def get_db():
-    db = sesion_local()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Mock de seguridad (Reemplaza con tu lógica real o importación)
-# def get_usuario_actual():
-#     class UsuarioMock:
-#         id_empleado = 1
-#         funcion = "Gerente"
-#     return UsuarioMock()
-
+# LEER TODOS
 @endpoint.get("/", response_model=List[TallaRead])
-def listar_tallas(db: Session = Depends(get_db)):
-    # Tip: Podrías ordenarlas por ID para que salgan S, M, L y no alfabéticamente L, M, S
+def listar_tallas(db: Session = Depends(get_db), _: EmpleadoRead = Depends(get_usuario_actual)):
     return db.query(TallaModel).order_by(TallaModel.id_talla).all()
 
+# POST
 @endpoint.post("/", response_model=TallaRead, status_code=status.HTTP_201_CREATED)
 def crear_talla(
     talla: TallaCreate, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    _: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion.value != "Gerente":
-        raise HTTPException(status_code=403, detail="Permisos insuficientes.")
-
+    existe = db.query(TallaModel).filter(func.lower(TallaModel.nombre) == talla.nombre.lower()).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Ya existe una talla con ese nombre.")
+    
     nueva_talla = TallaModel(**talla.model_dump())
-    try:
-        db.add(nueva_talla)
-        db.commit()
-        db.refresh(nueva_talla)
-        return nueva_talla
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="La talla ya existe.")
+    db.add(nueva_talla)
+    db.commit()
+    db.refresh(nueva_talla)
+    return nueva_talla
 
+# PUT
 @endpoint.put("/{id}", response_model=TallaRead)
 def actualizar_talla(
     id: int, 
@@ -56,8 +40,8 @@ def actualizar_talla(
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion.value != "Gerente":
-        raise HTTPException(status_code=403, detail="Permisos insuficientes.")
+    if usuario_actual.funcion.value != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     talla_db = db.query(TallaModel).filter(TallaModel.id_talla == id).first()
     if not talla_db:
@@ -74,14 +58,15 @@ def actualizar_talla(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+#DELETE
 @endpoint.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_talla(
     id: int, 
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion.value != "Gerente":
-        raise HTTPException(status_code=403, detail="Permisos insuficientes.")
+    if usuario_actual.funcion.value != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     talla_db = db.query(TallaModel).filter(TallaModel.id_talla == id).first()
     if not talla_db:

@@ -3,25 +3,31 @@ from decimal import Decimal
 from typing import Optional, List
 from schemas.variante import VarianteCreate, VarianteRead
 from schemas.help_categoria import CategoriaRead
+from schemas.help_marca import MarcaRead
 
 class ProductoBase(BaseModel):
     nombre: str = Field(max_length=145)
-    marca: str = Field(max_length=45)
-    precio_venta: Decimal = Field(gt=0)
+    costo_usd: Decimal = Field(gt=0)
+    precio_venta_usd: Decimal = Field(gt=0)
+    aplica_iva: bool
 
 class ProductoCreate(ProductoBase):
     id_categoria: int
+    id_marca: int
     variantes: List[VarianteCreate]
     
 class ProductoUpdate(BaseModel):
     nombre: Optional[str] = Field(None, max_length=145)
-    marca: Optional[str] = Field(None, max_length=45)
-    id_categoria: Optional[str] = None
-    precio_venta: Optional[Decimal] = Field(None, gt=0)
+    id_marca: Optional[int] = None
+    id_categoria: Optional[int] = None
+    costo_usd: Optional[Decimal] = Field(None, gt=0)
+    precio_venta_usd: Optional[Decimal] = Field(None, gt=0)
+    estatus: Optional[bool] = None
 
 class ProductoRead(ProductoBase):
     id_producto: int
-    categoria: CategoriaRead
+    categoria_rel: CategoriaRead
+    marca_rel: Optional[MarcaRead]
     variantes: List[VarianteRead]
     estatus: bool
     

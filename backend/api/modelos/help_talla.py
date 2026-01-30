@@ -7,3 +7,5 @@ class Talla(modelo_base_tabla):
 
     id_talla = Column(Integer, primary_key=True, autoincrement=True, index=True, nullable=False)
     nombre = Column(String(45), unique=True, index=True, nullable=False)
+    
+    variantes = relationship("Variante", back_populates="talla_rel")

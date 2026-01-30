@@ -1,10 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
-from enum import Enum
-
-class EmpleadoFuncionEnum (str, Enum):
-    gerente = "Gerente"
-    empleado = "Empleado"
+from modelos.empleado import EmpleadoFuncionEnum
 
 class EmpleadoBase(BaseModel):
     nombre: str = Field(max_length=100)
@@ -28,6 +24,8 @@ class EmpleadoUpdate(BaseModel):
     direccion: Optional[str] = Field(None, max_length=255)
     funcion: Optional[EmpleadoFuncionEnum] = None
     contrasena: Optional[str] = Field(None, max_length=255)
+    estatus: Optional[bool] = None
 
 class EmpleadoRead(EmpleadoBase):
     id_empleado: int
+    estatus: bool

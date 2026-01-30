@@ -1,53 +1,38 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List
-
-from config_db import sesion_local
 from modelos.help_color import Color as ColorModel
 from schemas.help_color import ColorCreate, ColorUpdate, ColorRead
 from schemas.empleado import EmpleadoRead
-from utilidades.login import get_usuario_actual 
+from utilidades.login import get_db, get_usuario_actual 
 
 endpoint = APIRouter(prefix="/colores", tags=["Colores"])
 
-def get_db():
-    db = sesion_local()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Mock de seguridad (Reemplaza con tu lógica real o importación)
-# def get_usuario_actual():
-#     class UsuarioMock:
-#         id_empleado = 1
-#         funcion = "Gerente"
-#     return UsuarioMock()
-
+# LEER TODOS
 @endpoint.get("/", response_model=List[ColorRead])
-def listar_colores(db: Session = Depends(get_db)):
+def listar_colores(db: Session = Depends(get_db), _: EmpleadoRead = Depends(get_usuario_actual)):
     return db.query(ColorModel).all()
 
+# POST
 @endpoint.post("/", response_model=ColorRead, status_code=status.HTTP_201_CREATED)
 def crear_color(
     color: ColorCreate, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    _: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion != "Gerente":
-        raise HTTPException(status_code=403, detail="No tienes permisos.")
 
-    nuevo_color = ColorModel(**color.model_dump())
-    try:
-        db.add(nuevo_color)
-        db.commit()
-        db.refresh(nuevo_color)
-        return nuevo_color
-    except IntegrityError:
-        db.rollback()
+    existe = db.query(ColorModel).filter(func.lower(ColorModel.nombre) == color.nombre.lower()).first()
+    if existe:
         raise HTTPException(status_code=400, detail="Ya existe un color con ese nombre.")
+    nuevo_color = ColorModel(**color.model_dump())
+    db.add(nuevo_color)
+    db.commit()
+    db.refresh(nuevo_color)
+    return nuevo_color
 
+# PUT    
 @endpoint.put("/{id}", response_model=ColorRead)
 def actualizar_color(
     id: int, 
@@ -55,8 +40,8 @@ def actualizar_color(
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion != "Gerente":
-        raise HTTPException(status_code=403, detail="Permisos insuficientes.")
+    if usuario_actual.funcion != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tienes permiso para esta función.")
 
     color_db = db.query(ColorModel).filter(ColorModel.id_color == id).first()
     if not color_db:
@@ -73,14 +58,15 @@ def actualizar_color(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+# DELETE
 @endpoint.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_color(
     id: int, 
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion != "Gerente":
-        raise HTTPException(status_code=403, detail="Permisos insuficientes.")
+    if usuario_actual.funcion != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     color_db = db.query(ColorModel).filter(ColorModel.id_color == id).first()
     if not color_db:

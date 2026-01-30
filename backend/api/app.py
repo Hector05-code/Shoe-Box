@@ -5,42 +5,44 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
-import bcrypt
-bcrypt.__about__ = type('type', (object,), {})()
-bcrypt.__about__.__version__ = bcrypt.__version__
-
 from fastapi import FastAPI
+from utilidades.cripto import get_password_hash
 from fastapi.middleware.cors import CORSMiddleware
-#from passlib.context import CryptContext
+from config_db import engine, sesion_local, modelo_base_tabla
 from modelos import (
     cliente,
+    configuracion,
     detalle_venta,
     empleado,
     help_categoria,
     help_color,
+    help_marca,
     help_talla,
     movimiento,
     producto,
+    recepcion,
     variante,
     venta
 )
-from config_db import engine, sesion_local, modelo_base_tabla
-from modelos.empleado import Empleado
+from modelos.empleado import Empleado, EmpleadoFuncionEnum
 from endpoints import (
     auth,
-    cliente, 
+    cliente,
+    configuracion, 
     detalle_venta, 
     empleado, 
     help_categoria, 
     help_color, 
+    help_marca,
     help_talla, 
     movimiento, 
-    producto, 
+    producto,
+    recepcion,
+    reporte, 
     variante, 
     venta) 
 
 modelo_base_tabla.metadata.create_all(bind=engine)
-#pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def crear_admin():
     session = sesion_local()
@@ -48,9 +50,7 @@ def crear_admin():
         admin = session.query(Empleado).filter(Empleado.usuario == "admin").first()
         
         if not admin:
-            password_bytes = "admin123".encode('utf-8')
-            salt = bcrypt.gensalt()
-            hashed = bcrypt.hashpw(password_bytes, salt)
+
             nuevo_admin = Empleado(
                 id_empleado=1,
                 nombre="Admin",
@@ -58,8 +58,9 @@ def crear_admin():
                 telefono="n/a",
                 direccion="n/a",
                 usuario="admin",
-                contrasena=hashed.decode('utf-8'),
-                funcion="Gerente"
+                contrasena=get_password_hash("admin123"),
+                funcion=EmpleadoFuncionEnum.GERENTE,
+                estatus=True
             )
             session.add(nuevo_admin)
             session.commit()
@@ -96,14 +97,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.endpoint)
 app.include_router(cliente.endpoint)
+app.include_router(configuracion.endpoint)
 app.include_router(detalle_venta.endpoint)
 app.include_router(empleado.endpoint)
 app.include_router(help_categoria.endpoint)
 app.include_router(help_color.endpoint)
+app.include_router(help_marca.endpoint)
 app.include_router(help_talla.endpoint)
 app.include_router(movimiento.endpoint)
 app.include_router(producto.endpoint)
+app.include_router(recepcion.endpoint)
+app.include_router(reporte.endpoint)
 app.include_router(variante.endpoint)
 app.include_router(venta.endpoint)
 app.include_router(auth.endpoint)

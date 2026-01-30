@@ -8,5 +8,4 @@ class Categoria(modelo_base_tabla):
     id_categoria = Column(Integer, autoincrement=True, primary_key=True, index=True, nullable=False)
     nombre = Column(String(45), index=True, nullable=False)
 
-    productos = relationship("Producto", back_populates="categoria")
-    #tabla opcional
+    productos = relationship("Producto", back_populates="categoria_rel")

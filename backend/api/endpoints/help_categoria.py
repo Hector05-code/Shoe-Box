@@ -1,47 +1,35 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List
-
-from config_db import sesion_local
-# Importamos Modelo y Schemas
 from modelos.help_categoria import Categoria as CategoriaModel
 from schemas.help_categoria import CategoriaCreate, CategoriaUpdate, CategoriaRead
-# Importamos Schemas de Empleado para permisos
 from schemas.empleado import EmpleadoRead
-from utilidades.login import get_usuario_actual 
+from utilidades.login import get_db, get_usuario_actual 
 
 endpoint = APIRouter(prefix="/categorias", tags=["Categorías"])
 
-def get_db():
-    db = sesion_local()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Mock de seguridad (Reemplaza con tu lógica real o importación)
-# def get_usuario_actual():
-#     class UsuarioMock:
-#         id_empleado = 1
-#         funcion = "Gerente"
-#     return UsuarioMock()
-
-# --- CRUD ---
-
+# LEER TODOS
 @endpoint.get("/", response_model=List[CategoriaRead])
-def listar_categorias(db: Session = Depends(get_db)):
+def listar_categorias(db: Session = Depends(get_db), _: EmpleadoRead = Depends(get_usuario_actual)):
     return db.query(CategoriaModel).all()
 
+# POST
 @endpoint.post("/", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
 def crear_categoria(
     categoria: CategoriaCreate, 
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion.value != "Gerente":
-        raise HTTPException(status_code=403, detail="No tienes permisos.")
+    if usuario_actual.funcion.value != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
+    existe = db.query(CategoriaModel).filter(
+        func.lower(CategoriaModel.nombre) == categoria.nombre.lower()).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Esta categoría ya existe")
+    
     nueva_cat = CategoriaModel(**categoria.model_dump())
     try:
         db.add(nueva_cat)
@@ -52,6 +40,7 @@ def crear_categoria(
         db.rollback()
         raise HTTPException(status_code=400, detail="Ya existe una categoría con ese nombre.")
 
+# PUT
 @endpoint.put("/{id}", response_model=CategoriaRead)
 def actualizar_categoria(
     id: int, 
@@ -59,8 +48,8 @@ def actualizar_categoria(
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion.value != "Gerente":
-        raise HTTPException(status_code=403, detail="Permisos insuficientes.")
+    if usuario_actual.funcion.value != "GERENTE":
+        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     cat_db = db.query(CategoriaModel).filter(CategoriaModel.id_categoria == id).first()
     if not cat_db:
@@ -77,13 +66,14 @@ def actualizar_categoria(
         db.rollback()
         raise HTTPException(status_code=400, detail="El nombre ya está en uso.")
 
+# DELETE
 @endpoint.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_categoria(
     id: int, 
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    if usuario_actual.funcion.value != "Gerente":
+    if usuario_actual.funcion.value != "GERENTE":
         raise HTTPException(status_code=403, detail="Permisos insuficientes.")
 
     cat_db = db.query(CategoriaModel).filter(CategoriaModel.id_categoria == id).first()
@@ -95,5 +85,4 @@ def eliminar_categoria(
         db.commit()
     except IntegrityError:
         db.rollback()
-        # Esto pasa si intentas borrar "Camisas" y hay productos asociados a ella
         raise HTTPException(status_code=400, detail="No se puede eliminar: Hay productos asociados a esta categoría.")
