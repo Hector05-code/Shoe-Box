@@ -6,6 +6,7 @@ from modelos.help_marca import Marca as MarcaModel
 from schemas.help_marca import MarcaCreate, MarcaRead, MarcaUpdate
 from schemas.empleado import EmpleadoRead
 from utilidades.login import get_db, get_usuario_actual
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/marcas", tags=["Marcas"])
 
@@ -36,10 +37,9 @@ def editar_marca(
     id: int, 
     marca_in: MarcaUpdate, 
     db: Session = Depends(get_db),
-    usuario: EmpleadoRead = Depends(get_usuario_actual)
+    usuario: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario.funcion.value != "GERENTE": # Asegúrate de usar mayúsculas aquí también
-        raise HTTPException(status_code=403, detail="Permisos insuficientes.")
 
     marca = db.query(MarcaModel).get(id)
     if not marca:

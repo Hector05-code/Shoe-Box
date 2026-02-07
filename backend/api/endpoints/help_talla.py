@@ -7,6 +7,7 @@ from modelos.help_talla import Talla as TallaModel
 from schemas.help_talla import TallaCreate, TallaUpdate, TallaRead
 from schemas.empleado import EmpleadoRead
 from utilidades.login import get_db, get_usuario_actual 
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/tallas", tags=["Tallas"])
 
@@ -38,10 +39,9 @@ def actualizar_talla(
     id: int, 
     talla_update: TallaUpdate, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     talla_db = db.query(TallaModel).filter(TallaModel.id_talla == id).first()
     if not talla_db:
@@ -63,10 +63,9 @@ def actualizar_talla(
 def eliminar_talla(
     id: int, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     talla_db = db.query(TallaModel).filter(TallaModel.id_talla == id).first()
     if not talla_db:

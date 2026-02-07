@@ -6,6 +6,7 @@ from modelos.cliente import Cliente as ClienteModel
 from schemas.cliente import ClienteCreate, ClienteUpdate, ClienteRead
 from schemas.empleado import EmpleadoRead
 from utilidades.login import get_db, get_usuario_actual
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/clientes", tags=["Clientes"])
 
@@ -65,9 +66,8 @@ def actualizar_cliente(id: int, cliente_data: ClienteUpdate, db: Session = Depen
 
 # ELIMINAR
 @endpoint.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_cliente(id: int, db: Session = Depends(get_db), usuario_actual: EmpleadoRead = Depends(get_usuario_actual)):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permisos para esta función.")
+def eliminar_cliente(id: int, db: Session = Depends(get_db), usuario_actual: EmpleadoRead = Depends(get_usuario_actual), autorizado: bool = Depends(requerir_permiso_gerente)):
+
     cliente_db = db.query(ClienteModel).filter(ClienteModel.id_cliente_ci == id).first()
     if not cliente_db:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")

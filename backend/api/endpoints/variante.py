@@ -9,6 +9,7 @@ from modelos.movimiento import Movimiento as MovimientoModel, TipoMovimientoEnum
 from schemas.variante import VarianteRead, VarianteUpdate, VarianteCreate 
 from schemas.empleado import EmpleadoRead
 from utilidades.login import get_db, get_usuario_actual
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/variantes", tags=["Variantes (Inventario)"])
 
@@ -126,10 +127,9 @@ def actualizar_variante(
     id_variante: int, 
     variante_update: VarianteUpdate, 
     db: Session = Depends(get_db),
-    usuario_actual : EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual : EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     variante_db = db.query(VarianteModel).filter(VarianteModel.id_variante == id_variante).first()
     if not variante_db:
@@ -175,11 +175,9 @@ def actualizar_variante(
 def eliminar_variante(
     id: int, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tiene permisos para esta función.")
 
     variante_db = db.query(VarianteModel).filter(VarianteModel.id_variante == id).first()
     

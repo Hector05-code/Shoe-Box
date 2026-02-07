@@ -6,7 +6,8 @@ from typing import List
 from modelos.help_categoria import Categoria as CategoriaModel
 from schemas.help_categoria import CategoriaCreate, CategoriaUpdate, CategoriaRead
 from schemas.empleado import EmpleadoRead
-from utilidades.login import get_db, get_usuario_actual 
+from utilidades.login import get_db, get_usuario_actual
+from utilidades.pin import requerir_permiso_gerente 
 
 endpoint = APIRouter(prefix="/categorias", tags=["Categorías"])
 
@@ -20,10 +21,9 @@ def listar_categorias(db: Session = Depends(get_db), _: EmpleadoRead = Depends(g
 def crear_categoria(
     categoria: CategoriaCreate, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     existe = db.query(CategoriaModel).filter(
         func.lower(CategoriaModel.nombre) == categoria.nombre.lower()).first()
@@ -46,10 +46,9 @@ def actualizar_categoria(
     id: int, 
     cat_update: CategoriaUpdate, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     cat_db = db.query(CategoriaModel).filter(CategoriaModel.id_categoria == id).first()
     if not cat_db:
@@ -71,10 +70,9 @@ def actualizar_categoria(
 def eliminar_categoria(
     id: int, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="Permisos insuficientes.")
 
     cat_db = db.query(CategoriaModel).filter(CategoriaModel.id_categoria == id).first()
     if not cat_db:

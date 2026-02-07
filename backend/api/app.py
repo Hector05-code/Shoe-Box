@@ -6,7 +6,7 @@ if current_dir not in sys.path:
     sys.path.append(current_dir)
 
 from fastapi import FastAPI
-from utilidades.cripto import get_password_hash
+from utilidades.cripto import get_password_hash, get_pin_hash
 from fastapi.middleware.cors import CORSMiddleware
 from config_db import engine, sesion_local, modelo_base_tabla
 from modelos import (
@@ -24,7 +24,7 @@ from modelos import (
     variante,
     venta
 )
-from modelos.empleado import Empleado, EmpleadoFuncionEnum
+from modelos.empleado import Empleado as EmpleadoModel, EmpleadoFuncionEnum
 from endpoints import (
     auth,
     cliente,
@@ -47,11 +47,11 @@ modelo_base_tabla.metadata.create_all(bind=engine)
 def crear_admin():
     session = sesion_local()
     try:
-        admin = session.query(Empleado).filter(Empleado.usuario == "admin").first()
+        admin = session.query(EmpleadoModel).filter(EmpleadoModel.usuario == "admin").first()
         
         if not admin:
 
-            nuevo_admin = Empleado(
+            nuevo_admin = EmpleadoModel(
                 id_empleado=1,
                 nombre="Admin",
                 apellido="n/a",
@@ -60,6 +60,7 @@ def crear_admin():
                 usuario="admin",
                 contrasena=get_password_hash("admin123"),
                 funcion=EmpleadoFuncionEnum.GERENTE,
+                pin_autorizacion=get_pin_hash("1234"),
                 estatus=True
             )
             session.add(nuevo_admin)

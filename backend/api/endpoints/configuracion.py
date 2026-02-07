@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from config_db import sesion_local
 from modelos.configuracion import Configuracion
 from utilidades.login import get_db, get_usuario_actual
 from schemas.empleado import EmpleadoRead
@@ -25,8 +24,6 @@ def actualizar_tasa(
     db: Session = Depends(get_db),
     _: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    # if usuario.funcion.value != "GERENTE":
-    #     raise HTTPException(status_code=403, detail="No tienes permiso para esta función.")
 
     config = db.query(Configuracion).first()
     if not config:

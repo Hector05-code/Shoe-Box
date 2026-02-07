@@ -11,6 +11,7 @@ from modelos.configuracion import Configuracion as ConfiguracionModel
 from schemas.venta import VentaCreate, VentaRead, Devolucion, MetodoPagoEnum
 from schemas.empleado import EmpleadoRead 
 from utilidades.login import get_db, get_usuario_actual
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/ventas", tags=["Ventas (Facturación)"])
 
@@ -156,11 +157,9 @@ def crear_venta(
 def anular_venta(
     id: int, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-
-    if usuario_actual.funcion != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permiso para esta función")
 
     venta = db.query(VentaModel).filter(VentaModel.id_venta == id).first()
     if not venta:

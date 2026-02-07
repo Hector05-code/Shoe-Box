@@ -8,6 +8,7 @@ from modelos.variante import Variante as VarianteModel
 from schemas.movimiento import MovimientoAjuste
 from schemas.empleado import EmpleadoRead
 from utilidades.login import get_db, get_usuario_actual
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/movimientos", tags=["Movimientos (Historial)"])
 
@@ -41,10 +42,9 @@ def consultar_historial(
 def realizar_ajuste_inventario(
     ajuste: MovimientoAjuste, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     variante = db.query(VarianteModel).filter(VarianteModel.id_variante == ajuste.id_variante).first()
     if not variante:

@@ -15,6 +15,7 @@ class EmpleadoBase(BaseModel):
 class EmpleadoCreate(EmpleadoBase):
     id_empleado: int
     contrasena: str = Field(min_length=6, max_length=255)
+    pin_autorizacion: Optional[str] = Field(None, min_length=4, max_length=255)
     
 class EmpleadoUpdate(BaseModel):
     nombre: Optional[str] = Field(None, max_length=100)

@@ -18,6 +18,7 @@ class Empleado(modelo_base_tabla):
     usuario = Column(String(50), unique=True, index=True, nullable=False)
     contrasena = Column(String(255), nullable=False)
     funcion = Column(Enum(EmpleadoFuncionEnum), index=True, nullable=False)
+    pin_autorizacion = Column(String(255), nullable=True)
     estatus = Column(Boolean, default=True, nullable=False)
     
     movimientos = relationship("Movimiento", back_populates="empleado_rel")

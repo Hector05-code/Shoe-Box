@@ -9,6 +9,7 @@ from modelos.movimiento import Movimiento as MovimientoModel, TipoMovimientoEnum
 from schemas.producto import ProductoCreate, ProductoUpdate, ProductoRead
 from schemas.empleado import EmpleadoRead
 from utilidades.login import get_db, get_usuario_actual
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/productos", tags=["Productos"])
 
@@ -101,11 +102,9 @@ def actualizar_producto_info(
     id: int, 
     producto_update: ProductoUpdate, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     prod_db = db.query(ProductoModel).filter(ProductoModel.id_producto == id).first()
     if not prod_db:
@@ -130,10 +129,9 @@ def actualizar_producto_info(
 def eliminar_producto(
     id_producto: int, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     producto = db.query(ProductoModel).filter(ProductoModel.id_producto == id_producto).first()
     if not producto:

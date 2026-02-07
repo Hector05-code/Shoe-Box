@@ -5,14 +5,16 @@ from sqlalchemy.exc import IntegrityError
 from typing import List
 from passlib.context import CryptContext
 from utilidades.login import get_db, get_usuario_actual
-from utilidades.cripto import get_password_hash
+from utilidades.cripto import get_password_hash, get_pin_hash
 from modelos.empleado import Empleado as EmpleadoModel
 from schemas.empleado import EmpleadoCreate, EmpleadoUpdate, EmpleadoRead
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/empleados", tags=["Empleados"])
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
+# LEER TODOS
 @endpoint.get("/", response_model=List[EmpleadoRead])
 def listar_empleados(db: Session = Depends(get_db), _: EmpleadoRead = Depends(get_usuario_actual), mostrar_inactivos: bool = False):
     empleados = db.query(EmpleadoModel)
@@ -34,12 +36,8 @@ def crear_empleado(
     empleado: EmpleadoCreate, 
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if str(usuario_actual.funcion.value) != "GERENTE": 
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="No tienes permisos para esta función."
-        )
 
     empleado_existente = db.query(EmpleadoModel).filter(
         func.lower(EmpleadoModel.usuario) == empleado.usuario.lower()
@@ -54,6 +52,10 @@ def crear_empleado(
     try:
         hashed_password = get_password_hash(empleado.contrasena)
         
+        hashed_pin = None
+        if empleado.pin_autorizacion:
+            hashed_pin = get_pin_hash(empleado.pin_autorizacion)
+        
         nuevo_empleado = EmpleadoModel(
             id_empleado=empleado.id_empleado,
             nombre=empleado.nombre,
@@ -63,6 +65,7 @@ def crear_empleado(
             usuario=empleado.usuario,
             contrasena=hashed_password,
             funcion=empleado.funcion.value,
+            pin_autorizacion=hashed_pin,
             estatus=True
         )
         
@@ -86,10 +89,9 @@ def actualizar_empleado(
     id: int, 
     datos_entrada: EmpleadoUpdate, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos.")
 
     empleado_db = db.query(EmpleadoModel).filter(EmpleadoModel.id_empleado == id).first()
     if not empleado_db:
@@ -120,10 +122,9 @@ def actualizar_empleado(
 def eliminar_empleado(
     id: int, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos.")
 
     empleado_db = db.query(EmpleadoModel).filter(EmpleadoModel.id_empleado == id).first()
     if not empleado_db:

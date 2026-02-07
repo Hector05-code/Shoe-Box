@@ -7,6 +7,7 @@ from modelos.help_color import Color as ColorModel
 from schemas.help_color import ColorCreate, ColorUpdate, ColorRead
 from schemas.empleado import EmpleadoRead
 from utilidades.login import get_db, get_usuario_actual 
+from utilidades.pin import requerir_permiso_gerente
 
 endpoint = APIRouter(prefix="/colores", tags=["Colores"])
 
@@ -38,10 +39,9 @@ def actualizar_color(
     id: int, 
     color_update: ColorUpdate, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permiso para esta función.")
 
     color_db = db.query(ColorModel).filter(ColorModel.id_color == id).first()
     if not color_db:
@@ -63,10 +63,9 @@ def actualizar_color(
 def eliminar_color(
     id: int, 
     db: Session = Depends(get_db),
-    usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
+    usuario_actual: EmpleadoRead = Depends(get_usuario_actual),
+    autorizado: bool = Depends(requerir_permiso_gerente)
 ):
-    if usuario_actual.funcion != "GERENTE":
-        raise HTTPException(status_code=403, detail="No tienes permisos para esta función.")
 
     color_db = db.query(ColorModel).filter(ColorModel.id_color == id).first()
     if not color_db:

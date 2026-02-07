@@ -53,9 +53,6 @@ def reporte_ventas_financiero(
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
 
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="Acceso denegado a reportes financieros.")
-
     fecha_fin = date.today()
     fecha_inicio = date.today()
 
@@ -93,9 +90,6 @@ def reporte_top_categorias(
     db: Session = Depends(get_db),
     usuario_actual: EmpleadoRead = Depends(get_usuario_actual)
 ):
-    
-    if usuario_actual.funcion.value != "GERENTE":
-        raise HTTPException(status_code=403, detail="Acceso denegado.")
 
     resultados = db.query(
         CategoriaModel.nombre,
