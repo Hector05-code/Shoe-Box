@@ -65,7 +65,7 @@ def crear_admin():
             )
             session.add(nuevo_admin)
             session.commit()
-            print("Usuario administrador creado con éxito: User='admin' | Contraseña='admin123'")
+            print("Usuario administrador creado con éxito: User='admin' | Contraseña='admin123' | PIN='1234'")
         else:
             print("Ya existe un administrador. Saltando creación.")
             
